@@ -1,21 +1,19 @@
 from rest_framework import generics
 from django.contrib.auth.models import User
-from rest_framework.permissions import AllowAny
-from .models import Movie, Showtime, Seat, Booking, Profile
-from .serializers import MovieSerializer, ShowtimeSerializer
-from rest_framework.decorators import api_view
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
+from .models import Movie, Showtime, Seat, Booking, Profile, DepositHistory
+from .serializers import MovieSerializer, ShowtimeSerializer, ProfileSerializer, BookingSerializer
 from rest_framework.response import Response
 from django.db import transaction
 from django.http import JsonResponse
 import qrcode
 import base64
 from io import BytesIO
-from .serializers import BookingSerializer
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from .serializers import ProfileSerializer
 from django.contrib.auth import update_session_auth_hash
+from django.db.models import Sum, Count
+
 
 
 class RegisterView(generics.CreateAPIView):
@@ -132,22 +130,45 @@ def create_booking(request):
     except Exception as e:
         return Response({"error": str(e)}, status=400)
     
+# views.py
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def deposit_money(request):
     amount = request.data.get('amount', 0)
-    if amount <= 0:
+    if not amount or int(amount) <= 0:
         return Response({"error": "Số tiền nạp phải lớn hơn 0"}, status=400)
     
+    amount = int(amount)
     profile, created = Profile.objects.get_or_create(user=request.user)
-    profile.balance += int(amount)
-    profile.save()
+    
+    with transaction.atomic():
+        # 1. Cộng tiền vào ví
+        profile.balance += amount
+        profile.save()
+        
+        # 2. Lưu vào lịch sử nạp (Giả sử bạn đã có model DepositHistory)
+        DepositHistory.objects.create(
+            user=request.user,
+            amount=amount
+        )
     
     return Response({
         "message": f"Nạp thành công {amount:,.0f} VNĐ!",
         "new_balance": profile.balance
     })
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_deposit_history(request):
+    # Lấy danh sách nạp tiền của user
+    history = DepositHistory.objects.filter(user=request.user).order_by('-created_at')
+    # Bạn có thể tạo Serializer riêng hoặc trả về list dict đơn giản
+    data = [{
+        "id": h.id,
+        "amount": h.amount,
+        "date": h.created_at.strftime("%d/%m/%Y %H:%M")
+    } for h in history]
+    return Response(data)
 @api_view(['POST'])
 def cinema_chatbot(request):
     # Lấy tin nhắn từ React gửi lên
@@ -229,11 +250,17 @@ def cancel_booking(request, booking_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_profile(request):
-    # Lấy hoặc tạo mới Profile nếu User chưa có
     profile, created = Profile.objects.get_or_create(user=request.user)
+    
     serializer = ProfileSerializer(profile)
-    return Response(serializer.data)
-
+    data = serializer.data
+    
+    data['is_staff'] = request.user.is_staff
+    data['is_admin'] = request.user.is_superuser
+    data['username'] = request.user.username
+    data['email'] = request.user.email
+    
+    return Response(data)
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def change_password(request):
@@ -253,3 +280,27 @@ def change_password(request):
     update_session_auth_hash(request, user)
     
     return Response({"message": "Chúc mừng! Bạn đã đổi mật khẩu thành công."})
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_statistics(request):
+    total_revenue = Booking.objects.aggregate(Sum('total_price'))['total_price__sum'] or 0
+    total_tickets = Booking.objects.count()
+    total_users = User.objects.count()
+    total_movies = Movie.objects.count()
+    
+    total_deposited = DepositHistory.objects.aggregate(Sum('amount'))['amount__sum'] or 0
+
+    movie_stats = Booking.objects.values('showtime__movie__title').annotate(
+        total_earned=Sum('total_price'),
+        tickets_sold=Count('id')
+    ).order_by('-total_earned')
+
+    return Response({
+        "total_revenue": total_revenue,
+        "total_tickets": total_tickets,
+        "total_users": total_users,
+        "total_movies": total_movies,
+        "total_deposited": total_deposited,
+        "movie_stats": list(movie_stats)
+    })

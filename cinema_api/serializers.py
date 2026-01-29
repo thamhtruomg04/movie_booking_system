@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Movie, Showtime, Profile, Booking
+from .models import Movie, Showtime, Profile, Booking, DepositHistory
 class ProfileSerializer(serializers.ModelSerializer):
     # Định nghĩa các trường lấy từ bảng User liên kết
     username = serializers.ReadOnlyField(source='user.username')
@@ -7,7 +7,6 @@ class ProfileSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Profile
-        # Bây giờ 'username' và 'email' đã hợp lệ nhờ định nghĩa ở trên
         fields = ['username', 'email', 'balance']
 
 class MovieSerializer(serializers.ModelSerializer):
@@ -46,3 +45,10 @@ class BookingSerializer(serializers.ModelSerializer):
     def get_seat_labels(self, obj):
         # Lấy danh sách label ghế (VD: "A1, A2") thay vì dùng seat_ids lỗi
         return ", ".join([f"{s.row_label}{s.number}" for s in obj.seats.all()])
+
+# serializers.py
+class DepositHistorySerializer(serializers.ModelSerializer):
+    date_display = serializers.DateTimeField(source='created_at', format="%Y-%m-%d %H:%M:%S")
+    class Meta:
+        model = DepositHistory
+        fields = ['id', 'amount', 'date_display']
