@@ -1,6 +1,14 @@
 from rest_framework import serializers
-from .models import Movie, Showtime
-from .models import Booking, Seat
+from .models import Movie, Showtime, Profile, Booking
+class ProfileSerializer(serializers.ModelSerializer):
+    # Định nghĩa các trường lấy từ bảng User liên kết
+    username = serializers.ReadOnlyField(source='user.username')
+    email = serializers.ReadOnlyField(source='user.email')
+
+    class Meta:
+        model = Profile
+        # Bây giờ 'username' và 'email' đã hợp lệ nhờ định nghĩa ở trên
+        fields = ['username', 'email', 'balance']
 
 class MovieSerializer(serializers.ModelSerializer):
     class Meta:

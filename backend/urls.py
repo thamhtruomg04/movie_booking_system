@@ -16,7 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
-from cinema_api.views import MovieList, ShowtimeList, get_seat_layout, create_booking, cinema_chatbot, get_user_bookings
+from cinema_api.views import MovieList, ShowtimeList, get_seat_layout, create_booking, cinema_chatbot, get_user_bookings, get_booking_detail, cancel_booking, get_profile, deposit_money, change_password
 from django.conf import settings
 from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -33,5 +33,10 @@ urlpatterns = [
     path('api/register/', RegisterView.as_view(), name='auth_register'),
     path('api/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/bookings/my-history/', get_user_bookings, name='user-history'),
+    path('api/booking-detail/<int:booking_id>/', get_booking_detail),
+    path('api/bookings/cancel/<int:booking_id>/', cancel_booking),
+    path('api/profile/', get_profile, name='get_profile'),
+    path('api/deposit/', deposit_money, name='deposit_money'),
+    path('api/change-password/', change_password, name='change_password'),
 
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
