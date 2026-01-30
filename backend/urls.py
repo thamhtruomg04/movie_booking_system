@@ -16,7 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
-from cinema_api.views import MovieList, ShowtimeList, get_seat_layout, create_booking, cinema_chatbot, get_user_bookings, get_booking_detail, cancel_booking, get_profile, deposit_money, change_password, get_deposit_history, admin_statistics
+from cinema_api.views import MovieList, ShowtimeList, get_seat_layout, create_booking, cinema_chatbot, get_user_bookings, get_booking_detail, cancel_booking, get_profile, deposit_money, change_password, get_deposit_history, admin_statistics, admin_get_all_users, admin_create_showtime, admin_get_resources, admin_add_movie, admin_delete_movie, admin_get_bookings, admin_cancel_booking
 from django.conf import settings
 from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -40,5 +40,12 @@ urlpatterns = [
     path('api/change-password/', change_password, name='change_password'),
     path('api/deposit-history/', get_deposit_history, name='deposit-history'),
     path('api/admin/stats/', admin_statistics),
+    path('api/admin/users/', admin_get_all_users),
+    path('api/admin/create-showtime/', admin_create_showtime),
+    path('api/admin/resources/', admin_get_resources),
+    path('api/admin/movies/add/', admin_add_movie),
+    path('api/admin/movies/delete/<int:pk>/', admin_delete_movie),
+    path('api/admin/bookings/', admin_get_bookings),
+    path('api/admin/bookings/cancel/<int:booking_id>/', admin_cancel_booking),
 
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

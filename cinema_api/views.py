@@ -304,3 +304,107 @@ def admin_statistics(request):
         "total_deposited": total_deposited,
         "movie_stats": list(movie_stats)
     })
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_get_all_users(request):
+    # Lấy tất cả user kèm thông tin profile (số dư)
+    profiles = Profile.objects.all().select_related('user').order_by('-balance')
+    data = []
+    for p in profiles:
+        data.append({
+            "id": p.user.id,
+            "username": p.user.username,
+            "email": p.user.email,
+            "balance": p.balance,
+            "is_staff": p.user.is_staff,
+            "date_joined": p.user.date_joined.strftime("%d/%m/%Y")
+        })
+    return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_create_showtime(request):
+    try:
+        movie_id = request.data.get('movie_id')
+        room_id = request.data.get('room_id')
+        start_time = request.data.get('start_time')
+        price = request.data.get('price')
+
+        # Tạo suất chiếu mới
+        showtime = Showtime.objects.create(
+            movie_id=movie_id,
+            room_id=room_id,
+            start_time=start_time,
+            price=price
+        )
+        return Response({"message": "Tạo suất chiếu thành công!", "id": showtime.id}, status=201)
+    except Exception as e:
+        return Response({"error": str(e)}, status=400)
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_get_resources(request):
+    # Lấy danh sách phim và phòng để Admin chọn trong Form
+    from .models import Movie, CinemaRoom # Đảm bảo đã import Room
+    movies = Movie.objects.values('id', 'title')
+    rooms = CinemaRoom.objects.values('id', 'name')
+    return Response({"movies": list(movies), "rooms": list(rooms)})
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_add_movie(request):
+    # Sử dụng Serializer để lưu dữ liệu kèm file ảnh (poster)
+    serializer = MovieSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=201)
+    return Response(serializer.errors, status=400)
+
+@api_view(['DELETE'])
+@permission_classes([IsAdminUser])
+def admin_delete_movie(request, pk):
+    try:
+        movie = Movie.objects.get(pk=pk)
+        movie.delete()
+        return Response({"message": "Xóa phim thành công!"})
+    except Movie.DoesNotExist:
+        return Response({"error": "Không tìm thấy phim"}, status=404)
+    
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def admin_get_bookings(request):
+    from .models import Booking
+    # Lấy 50 giao dịch mới nhất
+    bookings = Booking.objects.select_related('user', 'showtime__movie').order_by('-created_at')[:50]
+    data = []
+    for b in bookings:
+        data.append({
+            "id": b.id,
+            "user": b.user.username if b.user else "Khách vãng lai",
+            "movie": b.showtime.movie.title,
+            "total_price": b.total_price,
+            "payment_status": b.payment_status,
+            "created_at": b.created_at.strftime("%d/%m/%Y %H:%M")
+        })
+    return Response(data)
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def admin_cancel_booking(request, booking_id):
+    from .models import Booking, Profile
+    try:
+        booking = Booking.objects.get(id=booking_id)
+        # Nếu đã thanh toán bằng ví thì hoàn tiền
+        if booking.payment_status and booking.user:
+            profile = Profile.objects.get(user=booking.user)
+            profile.balance += booking.total_price
+            profile.save()
+        
+        booking.delete()
+        return Response({"message": "Đã hủy vé và hoàn tiền thành công!"})
+    except Exception as e:
+        return Response({"error": str(e)}, status=400)
