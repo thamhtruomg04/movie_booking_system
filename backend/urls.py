@@ -16,7 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
-from cinema_api.views import MovieList, ShowtimeList, get_seat_layout, create_booking, cinema_chatbot, get_user_bookings, get_booking_detail, cancel_booking, get_profile, deposit_money, change_password, get_deposit_history, admin_statistics, admin_get_all_users, admin_create_showtime, admin_get_resources, admin_add_movie, admin_delete_movie, admin_get_bookings, admin_cancel_booking
+from cinema_api.views import MovieList, ShowtimeList, get_seat_layout, create_booking, cinema_chatbot, get_user_bookings, get_booking_detail, cancel_booking, get_profile, deposit_money, change_password, get_deposit_history, admin_statistics, admin_get_all_users, admin_create_showtime, admin_get_resources, admin_add_movie, admin_delete_movie, admin_get_bookings, admin_cancel_booking, get_coupons, add_coupon, delete_coupon    
 from django.conf import settings
 from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -47,5 +47,8 @@ urlpatterns = [
     path('api/admin/movies/delete/<int:pk>/', admin_delete_movie),
     path('api/admin/bookings/', admin_get_bookings),
     path('api/admin/bookings/cancel/<int:booking_id>/', admin_cancel_booking),
+    path('api/admin/coupons/', get_coupons, name='admin-coupons'),
+    path('api/admin/coupons/add/', add_coupon),
+    path('api/admin/coupons/delete/<int:pk>/', delete_coupon),
 
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

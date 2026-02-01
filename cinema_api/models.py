@@ -78,3 +78,13 @@ class DepositHistory(models.Model):
 
     def __str__(self):
         return f"{self.user.username} nạp {self.amount} VNĐ"
+
+class Coupon(models.Model):
+    code = models.CharField(max_length=50, unique=True) # Mã không được trùng
+    discount_percent = models.IntegerField(default=10) # Phần trăm giảm
+    expiry_date = models.DateField() # Ngày hết hạn
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.code} - {self.discount_percent}%"

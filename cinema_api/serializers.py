@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Movie, Showtime, Profile, Booking, DepositHistory
+from .models import Movie, Showtime, Profile, Booking, DepositHistory, Coupon
 class ProfileSerializer(serializers.ModelSerializer):
     # Định nghĩa các trường lấy từ bảng User liên kết
     username = serializers.ReadOnlyField(source='user.username')
@@ -52,3 +52,8 @@ class DepositHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = DepositHistory
         fields = ['id', 'amount', 'date_display']
+
+class CouponSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Coupon
+        fields = '__all__'
