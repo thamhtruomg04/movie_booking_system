@@ -14,6 +14,10 @@ from rest_framework.decorators import api_view, permission_classes
 from django.contrib.auth import update_session_auth_hash
 from django.db.models import Sum, Count
 from rest_framework import status
+from django.core.mail import EmailMessage
+from django.template.loader import render_to_string
+from django.conf import settings
+from django.views.decorators.csrf import csrf_exempt
 
 
 
@@ -27,12 +31,10 @@ class RegisterView(generics.CreateAPIView):
         user = User.objects.create_user(username=username, password=password)
         return Response({"message": "Đăng ký thành công!"})
 
-class MovieList(generics.ListAPIView):
-    queryset = Movie.objects.all()
-    serializer_class = MovieSerializer
 
 class ShowtimeList(generics.ListAPIView):
     serializer_class = ShowtimeSerializer
+    permission_classes = [AllowAny]
 
     def get_queryset(self):
         # Lấy tham số movie_id từ URL ví dụ: /api/showtimes/?movie_id=1
@@ -43,7 +45,11 @@ class ShowtimeList(generics.ListAPIView):
     
 
 
+from rest_framework.permissions import AllowAny
+from rest_framework.decorators import api_view, permission_classes # Thêm permission_classes vào đây
+
 @api_view(['GET'])
+@permission_classes([AllowAny]) # THÊM DÒNG NÀY ĐỂ MỞ KHÓA API
 def get_seat_layout(request, showtime_id):
     try:
         showtime = Showtime.objects.get(id=showtime_id)
@@ -64,48 +70,97 @@ def get_seat_layout(request, showtime_id):
     except Showtime.DoesNotExist:
         return Response({"error": "Không tìm thấy suất chiếu"}, status=404)
     
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import permission_classes, api_view
+
+
+def send_booking_email(booking):
+    user = booking.user
+    showtime = booking.showtime
+    movie = showtime.movie
+    # Lấy danh sách nhãn ghế (ví dụ: A1, A2)
+    seats_label = ", ".join([f"{s.row_label}{s.number}" for s in booking.seats.all()])
+
+    subject = f'[VÉ XEM PHIM] - {movie.title}'
+    
+    # Nội dung email (có thể dùng HTML để làm đẹp hơn)
+    message = f"""
+    Chào {user.username},
+    
+    Chúc mừng bạn đã đặt vé thành công!
+    Thông tin chi tiết:
+    - Phim: {movie.title}
+    - Suất chiếu: {showtime.start_time.strftime('%H:%M - %d/%m/%Y')}
+    - Phòng: {showtime.room.name}
+    - Ghế: {seats_label}
+    - Tổng tiền: {booking.total_price:,} VNĐ
+    
+    Vui lòng đưa mã QR trong ứng dụng hoặc email này cho nhân viên để nhận vé.
+    Chúc bạn xem phim vui vẻ!
+    """
+
+    email = EmailMessage(
+        subject,
+        message,
+        settings.DEFAULT_FROM_EMAIL,
+        [user.email],
+    )
+    
+    # Nếu bạn muốn đính kèm ảnh QR Code gửi từ Backend
+    if booking.qr_code_image:
+        email.attach('ticket_qr.png', booking.qr_code_image.read(), 'image/png')
+        
+    email.send(fail_silently=False)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def create_booking(request):
     data = request.data
     try:
-        # 1. Lấy thông tin suất chiếu và tính tổng tiền
+        # 1. Lấy thông tin suất chiếu và ghế
         showtime = Showtime.objects.get(id=data['showtime_id'])
         seat_ids = data['seat_ids']
-        total_price = showtime.price * len(seat_ids)
+        base_price = showtime.price * len(seat_ids)
+        total_price = base_price
         
-        # 2. Lấy ví (Profile) của User
+        # 2. XỬ LÝ MÃ GIẢM GIÁ
+        coupon_code = data.get('coupon_code')
+        discount_amount = 0
+        if coupon_code:
+            try:
+                coupon = Coupon.objects.get(
+                    code__iexact=coupon_code, 
+                    is_active=True, 
+                    expiry_date__gte=timezone.now().date()
+                )
+                discount_amount = (base_price * coupon.discount_percent) / 100
+                total_price = base_price - discount_amount
+            except Coupon.DoesNotExist:
+                return Response({"error": "Mã giảm giá không hợp lệ!"}, status=400)
+
+        # 3. Lấy ví (Profile)
         profile, created = Profile.objects.get_or_create(user=request.user)
 
-        # 3. KIỂM TRA SỐ DƯ VÍ
+        # 4. KIỂM TRA SỐ DƯ
         if profile.balance < total_price:
-            return Response({
-                "error": f"Số dư không đủ! Bạn cần {total_price:,.0f} VNĐ nhưng ví chỉ còn {profile.balance:,.0f} VNĐ."
-            }, status=400)
+            return Response({"error": "Số dư không đủ!"}, status=400)
 
-        # 4. Sử dụng transaction để đảm bảo: Trừ tiền thành công thì mới tạo vé
+        # 5. TRANSACTION ATOMIC
         with transaction.atomic():
-            # THỰC HIỆN TRỪ TIỀN
             profile.balance -= total_price
             profile.save()
 
-            # Tạo vé
             booking = Booking.objects.create(
                 user=request.user,
                 showtime=showtime,
                 total_price=total_price,
-                payment_status=True # Đã thanh toán bằng ví
+                payment_status=True
             )
             booking.seats.set(seat_ids)
             
-            # Tạo QR code (Giữ nguyên logic của bạn)
+            # Tạo QR code nội bộ (logic cũ của bạn)
             movie_title = showtime.movie.title
-            seats = Seat.objects.filter(id__in=seat_ids)
-            seat_labels = ", ".join([f"{s.row_label}{s.number}" for s in seats])
-            booking_info = f"BookingID: {booking.id} | User: {request.user.username} | Phim: {movie_title} | Ghế: {seat_labels}"
+            seats_obj = Seat.objects.filter(id__in=seat_ids)
+            seat_labels = ", ".join([f"{s.row_label}{s.number}" for s in seats_obj])
+            booking_info = f"ID: {booking.id} | User: {request.user.username} | Phim: {movie_title} | Ghế: {seat_labels}"
             
             qr = qrcode.QRCode(version=1, box_size=10, border=5)
             qr.add_data(booking_info)
@@ -117,19 +172,75 @@ def create_booking(request):
             
             booking.qr_code = qr_base64
             booking.save()
+
+        try:
+            user_email = request.user.email
+            show_time_str = showtime.start_time.strftime('%H:%M - %d/%m/%Y')
             
+            subject = f"[VÉ XEM PHIM] Xác nhận đặt vé thành công: {movie_title}"
+            message = f"""
+Chào {request.user.username},
+
+Bạn đã đặt vé thành công! Dưới đây là thông tin vé của bạn:
+------------------------------------------
+Phim: {movie_title}
+Suất chiếu: {show_time_str}
+Ghế: {seat_labels}
+Phòng chiếu: {showtime.room.name}
+Tổng tiền: {total_price:,.0f} VNĐ
+(Đã giảm: {discount_amount:,.0f} VNĐ)
+------------------------------------------
+Vui lòng sử dụng mã QR kèm theo trong ứng dụng để vào phòng chiếu.
+
+Cảm ơn bạn đã sử dụng dịch vụ của chúng tôi!
+            """
+            
+            email = EmailMessage(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [user_email]
+            )
+            # Nếu bạn muốn đính kèm trực tiếp file ảnh QR vào email:
+            email.attach('ticket_qr.png', buffer.getvalue(), 'image/png')
+            
+            email.send(fail_silently=False)
+        except Exception as e:
+            print(f"Lỗi gửi email: {str(e)}")
+        # ============================================================
+
         return Response({
             "status": "success",
-            "message": f"Thanh toán thành công! Đã trừ {total_price:,.0f} VNĐ.",
+            "message": "Thanh toán thành công và vé đã được gửi qua email!",
             "booking_id": booking.id,
             "qr_code": qr_base64,
-            "new_balance": profile.balance # Trả về số dư mới để Frontend cập nhật
+            "new_balance": profile.balance,
+            "discount_applied": discount_amount
         }, status=201)
 
     except Showtime.DoesNotExist:
         return Response({"error": "Suất chiếu không tồn tại"}, status=404)
     except Exception as e:
         return Response({"error": str(e)}, status=400)
+    
+
+class MovieList(generics.ListAPIView):
+    serializer_class = MovieSerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        # Lấy tham số 'category' từ URL do React gửi lên (?category=movie hoặc ?category=series)
+        category = self.request.query_params.get('category')
+        
+        # Log ra terminal để bạn dễ kiểm tra khi click trên giao diện
+        print(f"--- DEBUG: React yêu cầu lọc loại: {category} ---")
+
+        if category and category != 'all':
+            # Phải đảm bảo giá trị 'category' trong Database lưu đúng là 'movie' hoặc 'series'
+            return Movie.objects.filter(category=category)
+            
+        return Movie.objects.all()
+    
     
 # views.py
 @api_view(['POST'])
@@ -435,3 +546,6 @@ def delete_coupon(request, pk):
         return Response(status=status.HTTP_204_NO_CONTENT)
     except Coupon.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
+    
+
+

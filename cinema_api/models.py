@@ -18,8 +18,13 @@ class Movie(models.Model):
         ('Hoạt hình', 'Hoạt hình'),
         ('Viễn tưởng', 'Viễn tưởng'),
     ]
+    MOVIE_TYPES = (
+        ('movie', 'Phim Lẻ'),
+        ('series', 'Phim Bộ'),
+    )
     title = models.CharField(max_length=200)
     image = models.ImageField(upload_to='posters/')
+    category = models.CharField(max_length=10, choices=MOVIE_TYPES, default='movie') 
     description = models.TextField()
     genre = models.CharField(
         max_length=100, 
