@@ -43,10 +43,9 @@ class BookingSerializer(serializers.ModelSerializer):
         return obj.showtime.start_time.strftime("%Y-%m-%d %H:%M")
 
     def get_seat_labels(self, obj):
-        # Lấy danh sách label ghế (VD: "A1, A2") thay vì dùng seat_ids lỗi
+        # Lấy danh sách label ghế thay vì dùng seat_ids lỗi
         return ", ".join([f"{s.row_label}{s.number}" for s in obj.seats.all()])
 
-# serializers.py
 class DepositHistorySerializer(serializers.ModelSerializer):
     date_display = serializers.DateTimeField(source='created_at', format="%Y-%m-%d %H:%M:%S")
     class Meta:

@@ -241,7 +241,7 @@ class MovieList(generics.ListAPIView):
             
         return Movie.objects.all()
     
-    
+
 # views.py
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -281,7 +281,9 @@ def get_deposit_history(request):
         "date": h.created_at.strftime("%d/%m/%Y %H:%M")
     } for h in history]
     return Response(data)
+
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def cinema_chatbot(request):
     # Lấy tin nhắn từ React gửi lên
     user_message = request.data.get('message', '').lower()
@@ -290,17 +292,13 @@ def cinema_chatbot(request):
     movies = Movie.objects.all()
     movie_titles = [m.title for m in movies]
     
-    # Logic phản hồi thông minh hơn một chút
     if "phim" in user_message or "chiếu" in user_message:
         titles_str = ", ".join(movie_titles)
         response = f"Hiện rạp đang chiếu các phim: {titles_str}. Bạn muốn đặt vé phim nào?"
-    
     elif any(title.lower() in user_message for title in movie_titles):
         response = "Phim này hiện vẫn còn vé. Bạn hãy nhấn nút 'ĐẶT VÉ NGAY' ở màn hình chính để chọn chỗ nhé!"
-        
     elif "giá vé" in user_message or "bao nhiêu" in user_message:
         response = "Giá vé tại rạp là 50.000 VNĐ cho tất cả các suất chiếu bạn nhé!"
-        
     else:
         response = "Chào bạn! Tôi là trợ lý ảo của rạp phim. Bạn có thể hỏi tôi về danh sách phim hoặc giá vé."
         
@@ -547,5 +545,31 @@ def delete_coupon(request, pk):
     except Coupon.DoesNotExist:
         return Response(status=status.HTTP_404_NOT_FOUND)
     
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def hold_seats(request):
+    seat_ids = request.data.get('seat_ids', [])
+    # Thiết lập thời gian hết hạn là 2 phút tính từ bây giờ
+    expiry = timezone.now() + timezone.timedelta(minutes=2)
+    
+    now = timezone.now()
+    
+    # Kiểm tra xem có ghế nào đang bị người khác giữ không
+    already_held = Seat.objects.filter(
+        id__in=seat_ids, 
+        held_until__gt=now
+    ).exclude(held_by=request.user)
 
+    if already_held.exists():
+        return Response({"error": "Một số ghế vừa bị người khác chọn!"}, status=400)
 
+    # Nếu ổn thì tiến hành giữ ghế
+    Seat.objects.filter(id__in=seat_ids).update(
+        held_by=request.user, 
+        held_until=expiry
+    )
+    
+    return Response({
+        "status": "success", 
+        "held_until": expiry.strftime("%H:%M:%S")
+    })

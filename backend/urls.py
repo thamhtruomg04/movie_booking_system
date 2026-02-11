@@ -50,5 +50,6 @@ urlpatterns = [
     path('api/admin/coupons/', get_coupons, name='admin-coupons'),
     path('api/admin/coupons/add/', add_coupon),
     path('api/admin/coupons/delete/<int:pk>/', delete_coupon),
+    
 
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
