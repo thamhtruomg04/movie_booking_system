@@ -26,6 +26,7 @@ from cinema_api.views import RegisterView
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/movies/', MovieList.as_view()),
+    path('api/movies/<int:pk>/', MovieList.as_view()), 
     path('api/showtimes/', ShowtimeList.as_view()),
     path('api/seats/<int:showtime_id>/', get_seat_layout),
     path('api/booking/create/', create_booking),

@@ -167,3 +167,6 @@ CORS_ALLOWED_ORIGINS = [
 import os
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+ALLOWED_HOSTS = ['11.11.150.7', '127.0.0.1', 'localhost']
+CORS_ALLOW_ALL_ORIGINS = True

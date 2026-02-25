@@ -224,22 +224,21 @@ Cảm ơn bạn đã sử dụng dịch vụ của chúng tôi!
         return Response({"error": str(e)}, status=400)
     
 
-class MovieList(generics.ListAPIView):
+class MovieList(generics.RetrieveAPIView, generics.ListAPIView): # Thêm RetrieveAPIView
     serializer_class = MovieSerializer
     permission_classes = [AllowAny]
 
     def get_queryset(self):
-        # Lấy tham số 'category' từ URL do React gửi lên (?category=movie hoặc ?category=series)
         category = self.request.query_params.get('category')
-        
-        # Log ra terminal để bạn dễ kiểm tra khi click trên giao diện
-        print(f"--- DEBUG: React yêu cầu lọc loại: {category} ---")
-
         if category and category != 'all':
-            # Phải đảm bảo giá trị 'category' trong Database lưu đúng là 'movie' hoặc 'series'
             return Movie.objects.filter(category=category)
-            
         return Movie.objects.all()
+
+    # Thêm hàm này để xử lý khi lấy chi tiết phim theo ID
+    def get(self, request, *args, **kwargs):
+        if 'pk' in kwargs:
+            return self.retrieve(request, *args, **kwargs)
+        return self.list(request, *args, **kwargs)
     
 
 # views.py
